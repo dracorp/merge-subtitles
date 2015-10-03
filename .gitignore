@@ -1,0 +1,6 @@
+.DS_Store
+.lwpcookies
+join-subs.pl-*
+blib
+Makefile
+pm_to_blib

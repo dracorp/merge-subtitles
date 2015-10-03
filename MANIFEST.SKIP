@@ -1,0 +1,15 @@
+\.cvsignore
+\.git
+\.gitignore
+\.DS_Store
+\.releaserc
+\.svn
+\.git
+join-subs.pl-.*
+blib
+CVS
+Makefile\.old
+Makefile$
+MANIFEST\.bak
+MANIFEST\.SKIP
+pm_to_blib
