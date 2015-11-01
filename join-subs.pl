@@ -16,7 +16,7 @@ use Pod::Usage;
 use File::Slurp;
 use Data::Dumper;
 use Video::Subtitle::SRT qw(:all);
-#use Fatal qw(write_file);
+use feature qw(:all);
 
 our $VERSION = '0.1';
 
@@ -86,7 +86,10 @@ sub join_subtitles { #{{{
             $srt->parse($file);
         };
         if ($EVAL_ERROR) {
-            croak "Parsing a file '$file' failed:\n$EVAL_ERROR";
+            if ( $EVAL_ERROR =~ m/Number must be digits: '...1/ ) {
+                say "Probably BOM in file '$file', TODO. You can use iconv program. See `man iconv` for more.";
+            }
+            say "Parsing the file '$file' failed: $EVAL_ERROR";
         }
         $subs->{$index}->{srt} = $tmp_callback_hash;
 
@@ -140,6 +143,10 @@ EOT
 
     return $result;
 } # end sub join_subtitles }}}
+
+if ( grep /\P{ASCII}/ => @ARGV ) {
+    @ARGV = map { decode( 'UTF-8', $_ ) } @ARGV;
+}
 
 pod2usage(2) unless (@ARGV);
 
