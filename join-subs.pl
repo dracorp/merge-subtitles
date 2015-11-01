@@ -57,8 +57,13 @@ sub join_subtitles { #{{{
         my $start_time = srt_time_to_milliseconds( $data->{start_time} );
 
         # convert comma to dot, comma(,) is separator for ASS format
-        $data->{start_time} =~ s/,/./;
-        $data->{end_time} =~ s/,/./;
+        $data->{start_time} =~ s/,(\d\d)\d/.$1/;
+        $data->{end_time} =~ s/,(\d\d)\d/.$1/;
+        
+        $data->{start_time} =~ s/^0(\d)/$1/;
+        $data->{end_time} =~ s/^0(\d)/$1/;
+        # remove useless formating
+        $data->{text} =~ s|</?i>||g;
 
         $tmp_callback_hash->{$start_time}->{start_time} = $data->{start_time};
         $tmp_callback_hash->{$start_time}->{end_time}   = $data->{end_time};
@@ -117,7 +122,7 @@ sub join_subtitles { #{{{
         my $start_time = $line->[2]->{start_time};
         my $end_time   = $line->[2]->{end_time};
         my $sub        = $line->[2]->{text};
-        push @result, "Dialogue: $start_time,$end_time,$index,,0000,0000,0000,,$sub";
+        push @result, "Dialogue: 0,$start_time,$end_time,$index,,0000,0000,0000,,$sub";
     }
     my $result = <<EOT;
 [Script Info]
@@ -139,7 +144,7 @@ Style: Bot,Comic Sans MS,18,&H008AFF99,&H00A6FFB8,&H80000000,&H80000000,-1,0,0,0
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 EOT
-    $result .= join "\r\n", @result, '';
+    $result .= join "\n", @result, '';
 
     return $result;
 } # end sub join_subtitles }}}
