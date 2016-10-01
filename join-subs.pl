@@ -59,7 +59,7 @@ sub join_subtitles { #{{{
         # convert comma to dot, comma(,) is separator for ASS format
         $data->{start_time} =~ s/,(\d\d)\d/.$1/;
         $data->{end_time} =~ s/,(\d\d)\d/.$1/;
-        
+
         $data->{start_time} =~ s/^0(\d)/$1/;
         $data->{end_time} =~ s/^0(\d)/$1/;
         # remove useless formating
@@ -156,7 +156,7 @@ if ( grep /\P{ASCII}/ => @ARGV ) {
 pod2usage(2) unless (@ARGV);
 
 GetOptions(
-    'h|help'       => sub { pod2usage(0); },
+    'h|help'       => sub { system "pod2text $PROGRAM_NAME"; exit 0 },
     'f|file=s{1,}' => \@files,
     'o|output=s'   => \$options->{output},
 ) or pod2usage(2);
@@ -166,7 +166,7 @@ if ( scalar @files < 2 ) {
 }
 
 if ( scalar @files > 2 ) {
-    pod2usage("Too many files at input. TODO");
+    pod2usage("Too many files at input");
 }
 
 # multiply option '-f'
