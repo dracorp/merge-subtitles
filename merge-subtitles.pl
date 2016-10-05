@@ -16,36 +16,62 @@ use Pod::Usage;
 use File::Slurp;
 use Data::Dumper;
 use Video::Subtitle::SRT qw(:all);
+use feature 'switch';
+no warnings 'experimental::smartmatch';
 use feature qw(:all);
 
 our $VERSION = '0.1';
 
 # Global variables for command line options
 my $options = {};
-my @files;
 
-sub join_subtitles { #{{{
-    #===  FUNCTION  ================================================================
-    #         NAME: join_subtitles
-    #      PURPOSE: joins two ( or more, todo) SRT subtitles into one in ASS format
-    #   PARAMETERS: ref array[files]
-    #      RETURNS: scalar(joined subtitles)
-    #  DESCRIPTION: ????
-    #       THROWS: no exceptions
-    #     COMMENTS: none
-    #     SEE ALSO: n/a
-    #===============================================================================
-    my $files = shift;
+=pod
 
-    if ( ref $files ne 'ARRAY' ) {
-        croak "Argument for 'join_subtitles' must be ref to array of files";
+=begin mergeSubtitles
+
+Joins two (or more) SRT subtitles into one ASS subtitle. As input it should be a ref to array of files.
+Returns scalar(string).
+
+=end mergeSubtitles
+
+=cut
+
+sub mergeSubtitles
+{
+    my $options = shift;
+
+    my $files = {};
+    if ( $options->{top} or $options->{bottom} or $options->{middle} ) {
+        $files->{top}    = $options->{top}    if $options->{top};
+        $files->{bottom} = $options->{bottom} if $options->{bottom};
+        $files->{middle} = $options->{middle} if $options->{middle};
     }
 
-    # temporary hash used to obtain data from callback
-    my $tmp_callback_hash;
+    if ( scalar keys %$files < 2 ) {
+        pod2usage("Should be at least two files for input");
+    }
+
+    if ( scalar keys %$files > 3 ) {
+        pod2usage("Too many files at input");
+    }
+
+
+    my @files = ();
+    for my $style (keys %$files){
+        $files[0] = $files->{$style} if $style eq 'top';
+        $files[1] = $files->{$style} if $style eq 'middle';
+        $files[2] = $files->{$style} if $style eq 'bottom';
+    }
+
+    # temporary hash used to get data from callback
+    my $callback_hash;
+    # ->{start_time in miliseconds}
+    #   ->{'start_time'} = '00:00:05,400'
+    #   ->{'end_time'} = '00:00:09,100'
+    #   ->{'text'} = subtitle
 
     # callback for Video::Subtitle::SRT->parse
-    my $callback = sub { #{{{
+    my $callback = sub {
         my $data = shift;
 
         # $data->{number}     = number
@@ -59,16 +85,16 @@ sub join_subtitles { #{{{
         # convert comma to dot, comma(,) is separator for ASS format
         $data->{start_time} =~ s/,(\d\d)\d/.$1/;
         $data->{end_time} =~ s/,(\d\d)\d/.$1/;
-
+        # remove leading zeros
         $data->{start_time} =~ s/^0(\d)/$1/;
         $data->{end_time} =~ s/^0(\d)/$1/;
         # remove useless formating
         $data->{text} =~ s|</?i>||g;
 
-        $tmp_callback_hash->{$start_time}->{start_time} = $data->{start_time};
-        $tmp_callback_hash->{$start_time}->{end_time}   = $data->{end_time};
-        $tmp_callback_hash->{$start_time}->{text}       = $data->{text};
-    }; #}}}
+        $callback_hash->{$start_time}->{start_time} = $data->{start_time};
+        $callback_hash->{$start_time}->{end_time}   = $data->{end_time};
+        $callback_hash->{$start_time}->{text}       = $data->{text};
+    };
 
     # joined subtitles in hash
     # $subs->{$index_of_file}->{file} = 'file name'
@@ -82,9 +108,10 @@ sub join_subtitles { #{{{
     my @subs;
 
     # iterate by input files
-    for my $index ( 0 .. $#{ $options->{files} } ) {
-        my $file = $options->{files}->[$index];
-        $tmp_callback_hash = {};
+    for my $index ( 0 .. $#files ) {
+        next unless defined $files[$index];
+        my $file = $files[$index];
+        $callback_hash = {};
         my $srt = new Video::Subtitle::SRT($callback);
         $subs->{$index}->{file} = $file;
         eval {
@@ -96,7 +123,7 @@ sub join_subtitles { #{{{
             }
             say "Parsing the file '$file' failed: $EVAL_ERROR";
         }
-        $subs->{$index}->{srt} = $tmp_callback_hash;
+        $subs->{$index}->{srt} = $callback_hash;
 
         # transform hash to array
         for my $start_time ( keys %{ $subs->{$index}->{srt} } ) {
@@ -118,11 +145,16 @@ sub join_subtitles { #{{{
     my @result;
     for my $line (@subs) {
         my $index = $line->[1];
-        $index = $index ? 'Bot' : 'Top';
+        my $style;
+        given ($index) {
+            $style = 'Top' when 0;
+            $style = 'Mid' when 1;
+            $style = 'Bot' when 2;
+        };
         my $start_time = $line->[2]->{start_time};
         my $end_time   = $line->[2]->{end_time};
         my $sub        = $line->[2]->{text};
-        push @result, "Dialogue: 0,$start_time,$end_time,$index,,0000,0000,0000,,$sub";
+        push @result, "Dialogue: 0,$start_time,$end_time,$style,,0000,0000,0000,,$sub";
     }
     my $result = <<EOT;
 [Script Info]
@@ -147,61 +179,63 @@ EOT
     $result .= join "\n", @result, '';
 
     return $result;
-} # end sub join_subtitles }}}
+}
+
+sub parseCommandLine
+{
+    my $options = shift;
+    GetOptions(
+        'h|help'       => sub { system "pod2text $PROGRAM_NAME"; exit 0 },
+        't|top=s'      => \$options->{top},
+        'b|bottom=s'   => \$options->{bottom},
+        'm|middle=s'   => \$options->{middle},
+        'o|output=s'   => \$options->{output},
+        # TODO
+        # --top-font=
+        # --top-font-size=
+        # --top-font-colors=
+        # --middle-font=
+        # --bottom-font=
+        # -e|--enconding
+    ) or pod2usage(2);
+
+    return ;
+}
 
 if ( grep /\P{ASCII}/ => @ARGV ) {
     @ARGV = map { decode( 'UTF-8', $_ ) } @ARGV;
 }
 
 pod2usage(2) unless (@ARGV);
-
-GetOptions(
-    'h|help'       => sub { system "pod2text $PROGRAM_NAME"; exit 0 },
-    'f|file=s{1,}' => \@files,
-    'o|output=s'   => \$options->{output},
-) or pod2usage(2);
-
-if ( scalar @files < 2 ) {
-    pod2usage("Should be at least two files for input");
-}
-
-if ( scalar @files > 2 ) {
-    pod2usage("Too many files at input");
-}
-
-# multiply option '-f'
-$options->{files} = \@files;
-
-my $ass = join_subtitles( $options->{files} );
+parseCommandLine($options);
+my $merged_subtitles = mergeSubtitles($options);
 
 if ( $options->{output} ) {
-    eval { write_file( $options->{output}, $ass ) };
+    eval { write_file( $options->{output}, $merged_subtitles ) };
     if ($EVAL_ERROR) {
         croak "Writing to file '$options->{output}' failed:\n$EVAL_ERROR";
     }
 }
 else {
-    print $ass;
+    print $merged_subtitles;
 }
 
-# {{{ END
-__END__
-
+# {{{ POD
 =pod
 
 =encoding utf8
 
 =head1 NAME
 
-join-subs.pl - joins SRT subtitles into one
+merge-subtitles.pl - merge subtitles into one
 
 =head1 SYNOPSIS
 
-join-subs.pl [-h|--help] [-f|--file file] [-o|--output file]
+merge-subtitles.pl [-h|--help] [-f|--file file] [-o|--output file]
 
 =head1 DESCRIPTION
 
-joins-subs.pl joins the subtitles into one SSA/ASS subtitle file.
+merge-subtitles.pl merge the subtitles in SRT format into one SSA/ASS subtitle file.
 
 =head1 OPTIONS
 
@@ -211,7 +245,11 @@ joins-subs.pl joins the subtitles into one SSA/ASS subtitle file.
 
 Print a summary of options and exit.
 
-=item -f file, --file file
+=item -t, --top filename
+
+=item -b, --bottom filename
+
+=item -m, --middle filename
 
 Input SRT subtitles. Should be at least two files for input. Subtitles must be in L<SRT|https://en.wikipedia.org/wiki/SubRip> format.
 
@@ -223,11 +261,11 @@ Output L<SSA/ASS|https://en.wikipedia.org/wiki/SubStation_Alpha> subtitle. If th
 
 =head1 EXAMPLE
 
-    join_subtitles.pl -f file.en.srt -f file.pl.srt -o file.ass
+    merge-subtitles.pl -f file.en.srt -f file.pl.srt -o file.ass
 
 =head1 AUTHOR
 
-dracorp E<lt>piotr.r.public@gmail.comE<gt>
+Piotr Rogoza aka dracorp E<lt>piotr.r.public@gmail.comE<gt>
 
 =head1 LICENSE
 

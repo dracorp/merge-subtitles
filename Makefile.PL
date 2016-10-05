@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker 6.48;
 
 eval "use Test::Manifest 1.21";
 
-my $script_name = "join-subs.pl";
+my $script_name = "merge-subtitles.pl";
 
 WriteMakefile(
 		'NAME'      => $script_name,

@@ -1,6 +1,6 @@
 use Test::More tests => 1;
 
-my $file = "blib/script/join-subs.pl";
+my $file = "blib/script/merge-subtitles.pl";
 
 print "bail out! Script file is missing!" unless -e $file;
 
